@@ -19,4 +19,5 @@ export interface User extends Entity {
     heightCm?: number;
     goals?: string[];
   };
+  patientProfileCompletion?: number;
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { SupabaseModule } from './common/database/supabase.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AnamnesisModule } from './modules/anamnesis/anamnesis.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -16,6 +17,7 @@ import configuration from './common/utils/configuration';
       isGlobal: true,
       load: [configuration],
     }),
+    SupabaseModule,
     AuthModule,
     UsersModule,
     PatientsModule,

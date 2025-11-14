@@ -47,6 +47,11 @@ Variáveis de ambiente suportadas:
 - `PORT` – Porta HTTP (padrão: `3000`).
 - `JWT_SECRET` – Segredo para assinatura JWT (padrão apenas para desenvolvimento).
 - `JWT_EXPIRES_IN` – Tempo de expiração do token (ex.: `1h`).
+- `SUPABASE_URL` – URL do projeto Supabase (aceita também `VITE_SUPABASE_URL`).
+- `SUPABASE_SERVICE_ROLE_KEY` – Chave service role utilizada pelo backend (aceita também `SUPABASE_SERVICE_KEY` ou `VITE_SUPABASE_SERVICE_ROLE_KEY`).
+- `SUPABASE_ANON_KEY` – Opcional; fallback para ambientes sem service role (aceita também `VITE_SUPABASE_ANON_KEY`).
+
+O módulo **Users/Auth** lê e grava diretamente na tabela `users` do banco Supabase (PostgreSQL). Garanta que as colunas citadas nos DTOs existam e que as políticas de RLS permitam as operações do backend (idealmente utilizando a service role key).
 
 ## Próximos passos sugeridos
 
