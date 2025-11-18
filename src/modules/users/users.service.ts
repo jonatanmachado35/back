@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
@@ -16,22 +17,24 @@ import { User } from './entities/user.entity';
 
 type UserRow = {
   id: string;
-  name: string;
+  nome: string;
   email: string;
-  password_hash: string;
-  whatsapp_number?: string | null;
-  roles: UserRole[] | null;
-  active_plan_id?: string | null;
-  professional_profile?: Record<string, unknown> | null;
-  patient_profile?: Record<string, unknown> | null;
-  patient_profile_completion?: number | null;
-  created_at: string | null;
-  updated_at: string | null;
+  senha_hash: string;
+  telefone?: string | null;
+  tipo?: string | null;
+  perfis: UserRole[] | null;
+  plano_ativo_id?: string | null;
+  perfil_profissional?: Record<string, unknown> | null;
+  perfil_paciente?: Record<string, unknown> | null;
+  perfil_paciente_completude?: number | null;
+  criado_em: string | null;
+  atualizado_em: string | null;
 };
 
 @Injectable()
 export class UsersService implements OnModuleInit {
-  private readonly tableName = 'users';
+  private readonly logger = new Logger(UsersService.name);
+  private readonly tableName = 'usuarios';
 
   constructor(@Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient) {}
 
@@ -40,29 +43,56 @@ export class UsersService implements OnModuleInit {
   }
 
   private async seed() {
-    const { data, error } = await this.supabase
+    // Verifica se existe algum usuário admin
+    const { data: users, error } = await this.supabase
       .from(this.tableName)
-      .select('id')
-      .contains('roles', [UserRole.ADMIN])
-      .limit(1)
-      .maybeSingle();
+      .select('id, perfis, email')
+      .limit(100);
 
     if (error) {
-      throw new InternalServerErrorException(
-        `Failed to verify admin user: ${error.message}`,
-      );
+      this.logger.error(`Failed to verify admin user: ${error.message}`);
+      return; // Don't crash on seed errors
     }
 
-    if (data) {
+    // Procura por um admin manualmente no array retornado
+    // Supabase may return perfis as string or array depending on driver
+    const hasAdmin = users?.some(user => {
+      let perfis = user.perfis;
+      // Handle case where perfis is returned as a string
+      if (typeof perfis === 'string') {
+        try {
+          perfis = JSON.parse(perfis);
+        } catch {
+          return false;
+        }
+      }
+      return Array.isArray(perfis) && perfis.includes(UserRole.ADMIN);
+    });
+
+    if (hasAdmin) {
+      this.logger.log('Admin user already exists, skipping seed');
       return;
     }
 
-    await this.create({
-      name: 'ZapNutre Admin',
-      email: 'admin@zapnutre.com',
-      password: 'ChangeMe123',
-      roles: [UserRole.ADMIN],
-    });
+    // Also check if the email already exists (double safety check)
+    const existingAdmin = await this.findByEmail('admin@zapnutre.com');
+    if (existingAdmin) {
+      this.logger.log('Admin user with email admin@zapnutre.com already exists, skipping seed');
+      return;
+    }
+
+    try {
+      await this.create({
+        name: 'ZapNutre Admin',
+        email: 'admin@zapnutre.com',
+        password: 'ChangeMe123',
+        whatsappNumber: '+5511999999999',
+        roles: [UserRole.ADMIN],
+      });
+      this.logger.log('Admin user created successfully');
+    } catch (error) {
+      this.logger.warn(`Could not create admin user during seed: ${error.message}`);
+    }
   }
 
   async create(payload: CreateUserDto): Promise<User> {
@@ -74,14 +104,32 @@ export class UsersService implements OnModuleInit {
     const passwordHash = await PasswordUtil.hash(payload.password);
     const roles = payload.roles?.length ? payload.roles : [UserRole.PATIENT];
 
-    const { data, error } = await this.supabase
+    // Determine tipo based on roles
+    // NOTE: The database tipo_usuario enum only has 'admin' and 'nutricionista'
+    // To add 'paciente' support, run: database/add-paciente-to-enum.sql
+    let tipo = 'nutricionista'; // Default fallback
+    if (roles.includes(UserRole.ADMIN)) {
+      tipo = 'admin';
+    } else if (roles.includes(UserRole.NUTRITIONIST)) {
+      tipo = 'nutricionista';
+    } else if (roles.includes(UserRole.PATIENT)) {
+      // WORKAROUND: Using 'nutricionista' for patients until enum is updated
+      tipo = 'nutricionista';
+      this.logger.warn(
+        'Using tipo="nutricionista" for patient users. ' +
+        'Run database/add-paciente-to-enum.sql to add proper "paciente" enum value.'
+      );
+    }
+
+    const { data, error} = await this.supabase
       .from(this.tableName)
       .insert({
-        name: payload.name,
+        nome: payload.name,
         email: payload.email.toLowerCase(),
-        password_hash: passwordHash,
-        whatsapp_number: payload.whatsappNumber,
-        roles,
+        senha_hash: passwordHash,
+        telefone: payload.whatsappNumber,
+        tipo: tipo,
+        perfis: roles,
       })
       .select('*')
       .single();
@@ -99,7 +147,7 @@ export class UsersService implements OnModuleInit {
     const { data, error } = await this.supabase
       .from(this.tableName)
       .select('*')
-      .order('created_at', { ascending: true });
+      .order('criado_em', { ascending: true });
 
     if (error) {
       throw new InternalServerErrorException(
@@ -159,7 +207,7 @@ export class UsersService implements OnModuleInit {
     const updateData: Record<string, unknown> = {};
 
     if (payload.name !== undefined) {
-      updateData.name = payload.name;
+      updateData.nome = payload.name;
     }
 
     if (payload.email !== undefined) {
@@ -167,38 +215,38 @@ export class UsersService implements OnModuleInit {
     }
 
     if (payload.whatsappNumber !== undefined) {
-      updateData.whatsapp_number = payload.whatsappNumber;
+      updateData.telefone = payload.whatsappNumber;
     }
 
     if (payload.roles !== undefined) {
-      updateData.roles = payload.roles;
+      updateData.perfis = payload.roles;
     }
 
     if (payload.activePlanId !== undefined) {
-      updateData.active_plan_id = payload.activePlanId;
+      updateData.plano_ativo_id = payload.activePlanId;
     }
 
     if (payload.professionalProfile !== undefined) {
-      updateData.professional_profile = payload.professionalProfile;
+      updateData.perfil_profissional = payload.professionalProfile;
     }
 
     if (payload.patientProfile !== undefined) {
-      updateData.patient_profile = payload.patientProfile;
+      updateData.perfil_paciente = payload.patientProfile;
     }
 
     if (payload.patientProfileCompletion !== undefined) {
-      updateData.patient_profile_completion = payload.patientProfileCompletion;
+      updateData.perfil_paciente_completude = payload.patientProfileCompletion;
     }
 
     if (payload.password) {
-      updateData.password_hash = await PasswordUtil.hash(payload.password);
+      updateData.senha_hash = await PasswordUtil.hash(payload.password);
     }
 
     if (Object.keys(updateData).length === 0) {
       return this.findById(id);
     }
 
-    updateData.updated_at = new Date().toISOString();
+    updateData.atualizado_em = new Date().toISOString();
 
     const { data, error } = await this.supabase
       .from(this.tableName)
@@ -237,17 +285,17 @@ export class UsersService implements OnModuleInit {
   private mapToUser(record: UserRow): User {
     return {
       id: record.id,
-      name: record.name,
+      name: record.nome,
       email: record.email,
-      passwordHash: record.password_hash,
-      whatsappNumber: record.whatsapp_number ?? undefined,
-      roles: record.roles ?? [],
-      activePlanId: record.active_plan_id ?? undefined,
-      professionalProfile: (record.professional_profile as User['professionalProfile']) ?? undefined,
-      patientProfile: (record.patient_profile as User['patientProfile']) ?? undefined,
-      patientProfileCompletion: record.patient_profile_completion ?? undefined,
-      createdAt: record.created_at ? new Date(record.created_at) : new Date(),
-      updatedAt: record.updated_at ? new Date(record.updated_at) : new Date(),
+      passwordHash: record.senha_hash,
+      whatsappNumber: record.telefone ?? undefined,
+      roles: record.perfis ?? [],
+      activePlanId: record.plano_ativo_id ?? undefined,
+      professionalProfile: (record.perfil_profissional as User['professionalProfile']) ?? undefined,
+      patientProfile: (record.perfil_paciente as User['patientProfile']) ?? undefined,
+      patientProfileCompletion: record.perfil_paciente_completude ?? undefined,
+      createdAt: record.criado_em ? new Date(record.criado_em) : new Date(),
+      updatedAt: record.atualizado_em ? new Date(record.atualizado_em) : new Date(),
     } as User;
   }
 }
