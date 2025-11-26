@@ -8,8 +8,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.enableCors({
-    origin: true, // reflect request origin to allow cross-origin calls
-    credentials: true,
+    origin: '*',
   });
 
   app.useGlobalPipes(
