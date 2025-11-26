@@ -36,7 +36,7 @@ export class UsersService implements OnModuleInit {
   private readonly logger = new Logger(UsersService.name);
   private readonly tableName = 'usuarios';
 
-  constructor(@Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient) {}
+  constructor(@Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient) { }
 
   async onModuleInit() {
     await this.seed();
@@ -91,7 +91,7 @@ export class UsersService implements OnModuleInit {
       });
       this.logger.log('Admin user created successfully');
     } catch (error) {
-      this.logger.warn(`Could not create admin user during seed: ${error.message}`);
+      this.logger.warn(`Could not create admin user during seed: ${(error as Error).message}`);
     }
   }
 
@@ -121,7 +121,7 @@ export class UsersService implements OnModuleInit {
       );
     }
 
-    const { data, error} = await this.supabase
+    const { data, error } = await this.supabase
       .from(this.tableName)
       .insert({
         nome: payload.name,
