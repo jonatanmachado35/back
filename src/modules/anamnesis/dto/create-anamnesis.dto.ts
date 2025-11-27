@@ -3,6 +3,9 @@ import { IsArray, IsBoolean, IsNumber, IsObject, IsString, ValidateNested } from
 
 class DadosPessoaisDto {
   @IsString()
+  nome!: string;
+
+  @IsString()
   dataNascimento!: string;
 
   @IsString()
