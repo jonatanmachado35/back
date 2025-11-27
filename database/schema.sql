@@ -203,68 +203,85 @@ ALTER TABLE anamnese ENABLE ROW LEVEL SECURITY;
 -- Planos: Leitura pública para usuários autenticados
 CREATE POLICY "Planos são visíveis para usuários autenticados"
     ON planos FOR SELECT
-    TO authenticated
     USING (true);
 
 -- Planos: Apenas admins podem gerenciar
 CREATE POLICY "Planos são gerenciáveis por admins"
     ON planos FOR ALL
-    TO authenticated
-    USING ('admin' = ANY(
-        (SELECT perfis FROM usuarios WHERE id = auth.uid())
-    ));
+    USING (
+        EXISTS (
+            SELECT 1 FROM usuarios 
+            WHERE id = auth.uid() 
+            AND 'admin' = ANY(perfis)
+        )
+    );
 
 -- Usuários: Podem ver seus próprios dados
 CREATE POLICY "Usuários podem ver próprios dados"
     ON usuarios FOR SELECT
-    TO authenticated
-    USING (id = auth.uid() OR 'admin' = ANY(
-        (SELECT perfis FROM usuarios WHERE id = auth.uid())
-    ));
+    USING (
+        id = auth.uid() 
+        OR EXISTS (
+            SELECT 1 FROM usuarios 
+            WHERE id = auth.uid() 
+            AND 'admin' = ANY(perfis)
+        )
+    );
 
 -- Usuários: Podem atualizar seus próprios dados
 CREATE POLICY "Usuários podem atualizar próprios dados"
     ON usuarios FOR UPDATE
-    TO authenticated
     USING (id = auth.uid())
     WITH CHECK (id = auth.uid());
 
 -- Registros de pacientes: Visível para dono ou nutricionista responsável
 CREATE POLICY "Registros visíveis para dono ou nutricionista"
     ON registros_pacientes FOR SELECT
-    TO authenticated
     USING (
         usuario_id = auth.uid()
         OR nutricionista_responsavel_id = auth.uid()
-        OR 'admin' = ANY((SELECT perfis FROM usuarios WHERE id = auth.uid()))
+        OR EXISTS (
+            SELECT 1 FROM usuarios 
+            WHERE id = auth.uid() 
+            AND 'admin' = ANY(perfis)
+        )
     );
 
 -- Registros de pacientes: Atualizável por dono ou nutricionista
 CREATE POLICY "Registros atualizáveis por dono ou nutricionista"
     ON registros_pacientes FOR ALL
-    TO authenticated
     USING (
         usuario_id = auth.uid()
         OR nutricionista_responsavel_id = auth.uid()
-        OR 'admin' = ANY((SELECT perfis FROM usuarios WHERE id = auth.uid()))
+        OR EXISTS (
+            SELECT 1 FROM usuarios 
+            WHERE id = auth.uid() 
+            AND 'admin' = ANY(perfis)
+        )
     );
 
 -- Pagamentos: Usuários podem ver seus próprios pagamentos
 CREATE POLICY "Pagamentos visíveis para dono"
     ON pagamentos FOR SELECT
-    TO authenticated
     USING (
         usuario_id = auth.uid()
-        OR 'admin' = ANY((SELECT perfis FROM usuarios WHERE id = auth.uid()))
+        OR EXISTS (
+            SELECT 1 FROM usuarios 
+            WHERE id = auth.uid() 
+            AND 'admin' = ANY(perfis)
+        )
     );
 
 -- Anamnese: Visível para dono, nutricionista responsável ou admin
 CREATE POLICY "Anamnese visível para dono ou nutricionista"
     ON anamnese FOR SELECT
-    TO authenticated
     USING (
         usuario_id = auth.uid()
-        OR 'admin' = ANY((SELECT perfis FROM usuarios WHERE id = auth.uid()))
+        OR EXISTS (
+            SELECT 1 FROM usuarios 
+            WHERE id = auth.uid() 
+            AND 'admin' = ANY(perfis)
+        )
         OR usuario_id IN (
             SELECT usuario_id FROM registros_pacientes
             WHERE nutricionista_responsavel_id = auth.uid()
@@ -274,7 +291,6 @@ CREATE POLICY "Anamnese visível para dono ou nutricionista"
 -- Anamnese: Gerenciável pelo dono
 CREATE POLICY "Anamnese gerenciável pelo dono"
     ON anamnese FOR ALL
-    TO authenticated
     USING (usuario_id = auth.uid())
     WITH CHECK (usuario_id = auth.uid());
 

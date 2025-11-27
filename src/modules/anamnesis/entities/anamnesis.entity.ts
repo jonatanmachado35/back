@@ -1,6 +1,7 @@
 import { Entity } from '../../../common/interfaces/entity.interface';
 
 export interface DadosPessoais {
+  nome: string;
   dataNascimento: string;
   genero: string;
   profissao: string;

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsNumber, IsObject, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsNumber, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 class DadosPessoaisDto {
   @IsString()
@@ -105,6 +105,10 @@ class ObjetivosDto {
 }
 
 export class CreateAnamnesisDto {
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
   @IsObject()
   @ValidateNested()
   @Type(() => DadosPessoaisDto)

@@ -129,7 +129,7 @@ export class UsersService implements OnModuleInit {
         senha_hash: passwordHash,
         telefone: payload.whatsappNumber,
         tipo: tipo,
-        perfis: roles,
+        perfis: `{${roles.join(',')}}`,
       })
       .select('*')
       .single();
@@ -219,7 +219,7 @@ export class UsersService implements OnModuleInit {
     }
 
     if (payload.roles !== undefined) {
-      updateData.perfis = payload.roles;
+      updateData.perfis = `{${payload.roles.join(',')}}`;
     }
 
     if (payload.activePlanId !== undefined) {
