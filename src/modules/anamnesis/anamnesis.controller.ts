@@ -4,7 +4,7 @@ import { AnamnesisService } from './anamnesis.service';
 
 @Controller('anamnesis')
 export class AnamnesisController {
-  constructor(private readonly anamnesisService: AnamnesisService) {}
+  constructor(private readonly anamnesisService: AnamnesisService) { }
 
   @Post()
   create(@Body() payload: CreateAnamnesisDto) {

@@ -9,7 +9,7 @@ export class AnamnesisService {
 
   async create(payload: CreateAnamnesisDto) {
     return this.repository.create({
-      userId: payload.userId,
+
       objective: payload.objective,
       dietaryRestrictions: payload.dietaryRestrictions,
       preferences: payload.preferences,

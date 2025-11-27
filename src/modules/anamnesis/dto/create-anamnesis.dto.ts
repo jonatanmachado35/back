@@ -1,8 +1,6 @@
 import { IsArray, IsOptional, IsString } from 'class-validator';
 
 export class CreateAnamnesisDto {
-  @IsString()
-  userId!: string;
 
   @IsString()
   objective!: string;

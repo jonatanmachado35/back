@@ -6,7 +6,7 @@ export interface AnamnesisAnswer {
 }
 
 export interface Anamnesis extends Entity {
-  userId: string;
+  userId?: string;
   objective: string;
   dietaryRestrictions?: string;
   preferences?: string;
