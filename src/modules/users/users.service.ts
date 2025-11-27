@@ -20,7 +20,7 @@ type UserRow = {
   nome: string;
   email: string;
   senha_hash: string;
-  telefone?: string | null;
+  numero_whatsapp?: string | null;
   tipo?: string | null;
   perfis: UserRole[] | null;
   plano_ativo_id?: string | null;
@@ -105,20 +105,13 @@ export class UsersService implements OnModuleInit {
     const roles = payload.roles?.length ? payload.roles : [UserRole.PATIENT];
 
     // Determine tipo based on roles
-    // NOTE: The database tipo_usuario enum only has 'admin' and 'nutricionista'
-    // To add 'paciente' support, run: database/add-paciente-to-enum.sql
     let tipo = 'nutricionista'; // Default fallback
     if (roles.includes(UserRole.ADMIN)) {
       tipo = 'admin';
     } else if (roles.includes(UserRole.NUTRITIONIST)) {
       tipo = 'nutricionista';
     } else if (roles.includes(UserRole.PATIENT)) {
-      // WORKAROUND: Using 'nutricionista' for patients until enum is updated
-      tipo = 'nutricionista';
-      this.logger.warn(
-        'Using tipo="nutricionista" for patient users. ' +
-        'Run database/add-paciente-to-enum.sql to add proper "paciente" enum value.'
-      );
+      tipo = 'paciente';
     }
 
     const { data, error } = await this.supabase
@@ -127,7 +120,7 @@ export class UsersService implements OnModuleInit {
         nome: payload.name,
         email: payload.email.toLowerCase(),
         senha_hash: passwordHash,
-        telefone: payload.whatsappNumber,
+        numero_whatsapp: payload.whatsappNumber,
         tipo: tipo,
         perfis: `{${roles.join(',')}}`,
       })
@@ -215,7 +208,7 @@ export class UsersService implements OnModuleInit {
     }
 
     if (payload.whatsappNumber !== undefined) {
-      updateData.telefone = payload.whatsappNumber;
+      updateData.numero_whatsapp = payload.whatsappNumber;
     }
 
     if (payload.roles !== undefined) {
@@ -288,7 +281,7 @@ export class UsersService implements OnModuleInit {
       name: record.nome,
       email: record.email,
       passwordHash: record.senha_hash,
-      whatsappNumber: record.telefone ?? undefined,
+      whatsappNumber: record.numero_whatsapp ?? undefined,
       roles: record.perfis ?? [],
       activePlanId: record.plano_ativo_id ?? undefined,
       professionalProfile: (record.perfil_profissional as User['professionalProfile']) ?? undefined,
