@@ -10,11 +10,11 @@ export class AnamnesisService {
   async create(payload: CreateAnamnesisDto) {
     return this.repository.create({
 
-      objective: payload.objective,
-      dietaryRestrictions: payload.dietaryRestrictions,
-      preferences: payload.preferences,
-      motivation: payload.motivation,
-      answers: payload.answers,
+      dadosPessoais: payload.dadosPessoais,
+      estiloVida: payload.estiloVida,
+      habitosAlimentares: payload.habitosAlimentares,
+      historicoSaude: payload.historicoSaude,
+      objetivos: payload.objetivos,
     });
   }
 
