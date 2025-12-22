@@ -29,20 +29,30 @@ export class AnamnesisService {
   constructor(@Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient) {}
 
   async create(payload: CreateAnamnesisDto) {
-    const usuarioId = payload.telefone ?? payload.userId;
+    const usuarioId = payload.telefone ?? payload.dadosPessoais?.telefone ?? payload.userId;
     if (!usuarioId) {
       throw new BadRequestException('userId or telefone is required');
+    }
+
+    const objective = payload.objective ?? payload.objetivos?.objetivo;
+    if (typeof objective !== 'string' || objective.trim().length === 0) {
+      throw new BadRequestException('objective is required');
+    }
+
+    const answers = payload.answers?.length ? payload.answers : this.buildAnswersFromPayload(payload);
+    if (!answers.length) {
+      throw new BadRequestException('answers are required');
     }
 
     const { data, error } = await this.supabase
       .from(this.tableName)
       .insert({
         usuario_id: usuarioId,
-        objetivo: payload.objective,
+        objetivo: objective,
         restricoes_alimentares: payload.dietaryRestrictions,
         preferencias: payload.preferences,
         motivacao: payload.motivation,
-        respostas: payload.answers,
+        respostas: answers,
       })
       .select('*')
       .single();
@@ -88,5 +98,55 @@ export class AnamnesisService {
       createdAt: record.criado_em ? new Date(record.criado_em) : new Date(),
       updatedAt: record.atualizado_em ? new Date(record.atualizado_em) : new Date(),
     };
+  }
+
+  private buildAnswersFromPayload(payload: CreateAnamnesisDto): AnamnesisAnswer[] {
+    const sections: Array<[string, Record<string, unknown> | undefined]> = [
+      ['dadosPessoais', payload.dadosPessoais],
+      ['historicoSaude', payload.historicoSaude],
+      ['objetivos', payload.objetivos],
+      ['habitosAlimentares', payload.habitosAlimentares],
+      ['estiloVida', payload.estiloVida],
+    ];
+
+    const answers: AnamnesisAnswer[] = [];
+    for (const [sectionName, section] of sections) {
+      if (!section) {
+        continue;
+      }
+
+      for (const [key, value] of Object.entries(section)) {
+        if (value === undefined || value === null) {
+          continue;
+        }
+
+        const answer = this.formatAnswer(value);
+        if (!answer) {
+          continue;
+        }
+
+        answers.push({
+          question: `${sectionName}.${key}`,
+          answer,
+        });
+      }
+    }
+
+    return answers;
+  }
+
+  private formatAnswer(value: unknown): string {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => this.formatAnswer(item))
+        .filter((item) => item.length > 0)
+        .join(', ');
+    }
+
+    if (typeof value === 'object') {
+      return JSON.stringify(value);
+    }
+
+    return String(value);
   }
 }
