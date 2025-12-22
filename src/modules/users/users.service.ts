@@ -91,7 +91,8 @@ export class UsersService implements OnModuleInit {
       });
       this.logger.log('Admin user created successfully');
     } catch (error) {
-      this.logger.warn(`Could not create admin user during seed: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Could not create admin user during seed: ${message}`);
     }
   }
 
