@@ -13,8 +13,9 @@ import { NutritionGoal } from './entities/nutrition-goal.entity';
 
 type NutritionGoalRow = {
   id: string;
-  pacient_id: string;
+  pacient_id: number;
   meta_calorias?: number | string | null;
+  meta_proteinas?: number | string | null;
   meta_carboidratos?: number | string | null;
   meta_gorduras?: number | string | null;
   meta_fibras?: number | string | null;
@@ -30,8 +31,9 @@ type NutritionGoalRow = {
 };
 
 type NormalizedNutritionGoal = {
-  pacientId?: string;
+  pacientId?: number;
   metaCalorias?: number;
+  metaProteinas?: number;
   metaCarboidratos?: number;
   metaGorduras?: number;
   metaFibras?: number;
@@ -47,16 +49,26 @@ type NormalizedNutritionGoal = {
 @Injectable()
 export class NutritionGoalsService {
   private readonly tableName = 'metas_nutricionais';
+  // Default calculation factors; adjust to match your nutrition rules.
+  private readonly caloriesPerKg = 30;
+  private readonly proteinPerKg = 2.0;
+  private readonly fatPerKg = 0.8;
+  private readonly fiberPerKcal = 14 / 1000;
+  private readonly waterLitersPerKg = 0.035;
 
   constructor(@Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient) {}
 
   async create(payload: CreateNutritionGoalDto): Promise<NutritionGoal> {
     const normalized = this.normalizePayload(payload);
-    if (!normalized.pacientId) {
+    if (normalized.pacientId === undefined) {
       throw new BadRequestException('pacient_id is required');
     }
+    if (!Number.isInteger(normalized.pacientId)) {
+      throw new BadRequestException('pacient_id must be an integer');
+    }
 
-    const data = this.buildMutationData(normalized, true);
+    const calculated = this.applyCalculatedFields(normalized);
+    const data = this.buildMutationData(calculated, true);
     const { data: row, error } = await this.supabase
       .from(this.tableName)
       .insert(data)
@@ -73,7 +85,7 @@ export class NutritionGoalsService {
   }
 
   async updateByPacientId(
-    pacientId: string,
+    pacientId: number,
     payload: UpdateNutritionGoalDto,
   ): Promise<NutritionGoal> {
     const normalized = this.normalizePayload(payload);
@@ -106,9 +118,12 @@ export class NutritionGoalsService {
   private normalizePayload(
     payload: CreateNutritionGoalDto | UpdateNutritionGoalDto,
   ): NormalizedNutritionGoal {
+    const rawPacientId = payload.pacientId ?? payload.pacient_id;
+    const pacientId = rawPacientId !== undefined ? this.toNumber(rawPacientId) : undefined;
     return {
-      pacientId: payload.pacientId ?? payload.pacient_id,
+      pacientId,
       metaCalorias: payload.metaCalorias ?? payload.meta_calorias,
+      metaProteinas: payload.metaProteinas ?? payload.meta_proteinas,
       metaCarboidratos: payload.metaCarboidratos ?? payload.meta_carboidratos,
       metaGorduras: payload.metaGorduras ?? payload.meta_gorduras,
       metaFibras: payload.metaFibras ?? payload.meta_fibras,
@@ -134,6 +149,10 @@ export class NutritionGoalsService {
 
     if (payload.metaCalorias !== undefined) {
       data.meta_calorias = payload.metaCalorias;
+    }
+
+    if (payload.metaProteinas !== undefined) {
+      data.meta_proteinas = payload.metaProteinas;
     }
 
     if (payload.metaCarboidratos !== undefined) {
@@ -184,6 +203,7 @@ export class NutritionGoalsService {
       id: record.id,
       pacientId: record.pacient_id,
       metaCalorias: this.toNumber(record.meta_calorias),
+      metaProteinas: this.toNumber(record.meta_proteinas),
       metaCarboidratos: this.toNumber(record.meta_carboidratos),
       metaGorduras: this.toNumber(record.meta_gorduras),
       metaFibras: this.toNumber(record.meta_fibras),
@@ -199,6 +219,60 @@ export class NutritionGoalsService {
     };
   }
 
+  private applyCalculatedFields(payload: NormalizedNutritionGoal): NormalizedNutritionGoal {
+    const result: NormalizedNutritionGoal = { ...payload };
+    const needsCalc = [
+      result.metaCalorias,
+      result.metaProteinas,
+      result.metaCarboidratos,
+      result.metaGorduras,
+      result.metaFibras,
+      result.metaAgua,
+    ].some((value) => value === undefined);
+
+    if (!needsCalc) {
+      return result;
+    }
+
+    if (result.pesoObjetivo === undefined) {
+      throw new BadRequestException('peso_objetivo is required to calculate nutrition goals');
+    }
+
+    const peso = result.pesoObjetivo;
+    if (Number.isNaN(peso)) {
+      throw new BadRequestException('peso_objetivo must be a number');
+    }
+    if (result.metaCalorias === undefined) {
+      result.metaCalorias = this.round(peso * this.caloriesPerKg);
+    }
+
+    if (result.metaProteinas === undefined) {
+      result.metaProteinas = this.round(peso * this.proteinPerKg);
+    }
+
+    if (result.metaGorduras === undefined) {
+      result.metaGorduras = this.round(peso * this.fatPerKg);
+    }
+
+    if (result.metaFibras === undefined && result.metaCalorias !== undefined) {
+      result.metaFibras = this.round(result.metaCalorias * this.fiberPerKcal);
+    }
+
+    if (result.metaAgua === undefined) {
+      result.metaAgua = this.round(peso * this.waterLitersPerKg, 3);
+    }
+
+    if (result.metaCarboidratos === undefined && result.metaCalorias !== undefined) {
+      const proteinCalories = (result.metaProteinas ?? 0) * 4;
+      const fatCalories = (result.metaGorduras ?? 0) * 9;
+      const remainingCalories = result.metaCalorias - proteinCalories - fatCalories;
+      const carbs = remainingCalories > 0 ? remainingCalories / 4 : 0;
+      result.metaCarboidratos = this.round(carbs);
+    }
+
+    return result;
+  }
+
   private toNumber(value: number | string | null | undefined): number | undefined {
     if (value === null || value === undefined) {
       return undefined;
@@ -210,5 +284,10 @@ export class NutritionGoalsService {
     }
 
     return parsed;
+  }
+
+  private round(value: number, precision = 2): number {
+    const factor = 10 ** precision;
+    return Math.round(value * factor) / factor;
   }
 }

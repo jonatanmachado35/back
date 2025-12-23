@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
 import { CreateNutritionGoalDto } from './dto/create-nutrition-goal.dto';
 import { UpdateNutritionGoalDto } from './dto/update-nutrition-goal.dto';
 import { NutritionGoalsService } from './nutrition-goals.service';
@@ -14,7 +14,7 @@ export class NutritionGoalsController {
 
   @Patch('paciente/:pacientId')
   updateByPacient(
-    @Param('pacientId') pacientId: string,
+    @Param('pacientId', ParseIntPipe) pacientId: number,
     @Body() payload: UpdateNutritionGoalDto,
   ) {
     return this.nutritionGoalsService.updateByPacientId(pacientId, payload);

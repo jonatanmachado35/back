@@ -1,13 +1,13 @@
-import { IsBoolean, IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsNumber, IsOptional } from 'class-validator';
 
 export class CreateNutritionGoalDto {
   @IsOptional()
-  @IsString()
-  pacientId?: string;
+  @IsNumber()
+  pacientId?: number;
 
   @IsOptional()
-  @IsString()
-  pacient_id?: string;
+  @IsNumber()
+  pacient_id?: number;
 
   @IsOptional()
   @IsNumber()
@@ -16,6 +16,14 @@ export class CreateNutritionGoalDto {
   @IsOptional()
   @IsNumber()
   meta_calorias?: number;
+
+  @IsOptional()
+  @IsNumber()
+  metaProteinas?: number;
+
+  @IsOptional()
+  @IsNumber()
+  meta_proteinas?: number;
 
   @IsOptional()
   @IsNumber()

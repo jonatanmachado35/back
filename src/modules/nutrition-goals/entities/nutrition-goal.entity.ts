@@ -1,8 +1,9 @@
 import { Entity } from '../../../common/interfaces/entity.interface';
 
 export interface NutritionGoal extends Entity {
-  pacientId: string;
+  pacientId: number;
   metaCalorias?: number;
+  metaProteinas?: number;
   metaCarboidratos?: number;
   metaGorduras?: number;
   metaFibras?: number;
