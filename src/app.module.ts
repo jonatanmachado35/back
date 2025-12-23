@@ -8,6 +8,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { PatientsModule } from './modules/patients/patients.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { PlansModule } from './modules/plans/plans.module';
+import { NutritionGoalsModule } from './modules/nutrition-goals/nutrition-goals.module';
 import { UsersModule } from './modules/users/users.module';
 import configuration from './common/utils/configuration';
 
@@ -23,6 +24,7 @@ import configuration from './common/utils/configuration';
     PatientsModule,
     PlansModule,
     PaymentsModule,
+    NutritionGoalsModule,
     NotificationsModule,
     AnamnesisModule,
     AnalyticsModule,
