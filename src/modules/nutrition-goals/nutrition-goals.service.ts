@@ -55,6 +55,7 @@ export class NutritionGoalsService {
   private readonly fatPerKg = 0.8;
   private readonly fiberPerKcal = 14 / 1000;
   private readonly waterLitersPerKg = 0.035;
+  private readonly patientRecordsTable = 'registros_pacientes';
 
   constructor(@Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient) {}
 
@@ -113,6 +114,81 @@ export class NutritionGoalsService {
     }
 
     return this.mapToNutritionGoal(row as NutritionGoalRow);
+  }
+
+  async getDailyBalance(pacientId: number, date?: string) {
+    const day = this.normalizeDateKey(date ?? new Date().toISOString());
+    if (!day) {
+      throw new BadRequestException('Invalid date format. Use YYYY-MM-DD.');
+    }
+
+    const { data: mealsRow, error: mealsError } = await this.supabase
+      .from(this.patientRecordsTable)
+      .select('registros_refeicoes')
+      .eq('pacient_id', pacientId)
+      .maybeSingle();
+
+    if (mealsError) {
+      throw new InternalServerErrorException(
+        `Failed to load meal records for pacient ${pacientId}: ${mealsError.message}`,
+      );
+    }
+
+    const mealTotals = this.sumMealsForDay(mealsRow?.registros_refeicoes, day);
+    const { data: goals, error: goalsError } = await this.supabase
+      .from(this.tableName)
+      .select(
+        'meta_calorias, meta_proteinas, meta_carboidratos, meta_gorduras, meta_fibras, meta_agua, ativo, data_inicio',
+      )
+      .eq('pacient_id', pacientId)
+      .order('data_inicio', { ascending: false })
+      .limit(1);
+
+    if (goalsError) {
+      throw new InternalServerErrorException(
+        `Failed to load nutrition goals for pacient ${pacientId}: ${goalsError.message}`,
+      );
+    }
+
+    const goal = goals?.[0];
+    if (!goal) {
+      throw new NotFoundException(`Nutrition goal for pacient ${pacientId} not found`);
+    }
+
+    const goalTotals = {
+      calorias: this.toNumber(goal.meta_calorias) ?? 0,
+      proteinas: this.toNumber(goal.meta_proteinas) ?? 0,
+      carboidratos: this.toNumber(goal.meta_carboidratos) ?? 0,
+      gorduras: this.toNumber(goal.meta_gorduras) ?? 0,
+      fibras: this.toNumber(goal.meta_fibras) ?? 0,
+      agua: this.toNumber(goal.meta_agua) ?? 0,
+    };
+
+    const remaining = {
+      calorias: this.round(goalTotals.calorias - mealTotals.calorias),
+      proteinas: this.round(goalTotals.proteinas - mealTotals.proteinas),
+      carboidratos: this.round(goalTotals.carboidratos - mealTotals.carboidratos),
+      gorduras: this.round(goalTotals.gorduras - mealTotals.gorduras),
+      fibras: this.round(goalTotals.fibras - mealTotals.fibras),
+      agua: this.round(goalTotals.agua - mealTotals.agua, 3),
+    };
+
+    const exceeded = {
+      calorias: remaining.calorias < 0,
+      proteinas: remaining.proteinas < 0,
+      carboidratos: remaining.carboidratos < 0,
+      gorduras: remaining.gorduras < 0,
+      fibras: remaining.fibras < 0,
+      agua: remaining.agua < 0,
+    };
+
+    return {
+      date: day,
+      totals: mealTotals,
+      goals: goalTotals,
+      remaining,
+      exceeded,
+    };
   }
 
   private normalizePayload(
@@ -271,6 +347,120 @@ export class NutritionGoalsService {
     }
 
     return result;
+  }
+
+  private sumMealsForDay(records: unknown, day: string) {
+    const totals = {
+      calorias: 0,
+      proteinas: 0,
+      carboidratos: 0,
+      gorduras: 0,
+      fibras: 0,
+      agua: 0,
+    };
+
+    let parsedRecords = records;
+    if (typeof parsedRecords === 'string') {
+      try {
+        parsedRecords = JSON.parse(parsedRecords);
+      } catch {
+        return totals;
+      }
+    }
+
+    if (!Array.isArray(parsedRecords)) {
+      return totals;
+    }
+
+    for (const meal of parsedRecords) {
+      if (!meal || typeof meal !== 'object') {
+        continue;
+      }
+
+      const mealDate = this.extractDateKey(meal);
+      if (mealDate !== day) {
+        continue;
+      }
+
+      const calories = this.toNumber(this.pickValue(meal, ['calories', 'calorias']));
+      totals.calorias += calories ?? 0;
+
+      const macros = this.normalizeMacros((meal as Record<string, unknown>).macros);
+      const protein = this.toNumber(
+        this.pickValue({ ...macros, ...meal }, ['protein', 'proteinas']),
+      );
+      const carbs = this.toNumber(
+        this.pickValue({ ...macros, ...meal }, ['carbs', 'carboidratos']),
+      );
+      const fats = this.toNumber(
+        this.pickValue({ ...macros, ...meal }, ['fat', 'gorduras', 'gorduras_totais']),
+      );
+      const fiber = this.toNumber(
+        this.pickValue({ ...macros, ...meal }, ['fiber', 'fibras']),
+      );
+      const water = this.toNumber(this.pickValue({ ...macros, ...meal }, ['water', 'agua']));
+
+      totals.proteinas += protein ?? 0;
+      totals.carboidratos += carbs ?? 0;
+      totals.gorduras += fats ?? 0;
+      totals.fibras += fiber ?? 0;
+      totals.agua += water ?? 0;
+    }
+
+    return totals;
+  }
+
+  private extractDateKey(meal: object): string | undefined {
+    const value = this.pickValue(meal, ['datetime', 'dataHora', 'data_hora', 'date', 'data']);
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    return this.normalizeDateKey(value);
+  }
+
+  private normalizeDateKey(value: string): string | undefined {
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+      return value.slice(0, 10);
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return undefined;
+    }
+
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  private pickValue(source: object, keys: string[]): unknown {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        return (source as Record<string, unknown>)[key];
+      }
+    }
+
+    return undefined;
+  }
+
+  private normalizeMacros(macros: unknown): Record<string, unknown> {
+    if (!macros) {
+      return {};
+    }
+
+    if (typeof macros === 'string') {
+      try {
+        const parsed = JSON.parse(macros) as Record<string, unknown>;
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    if (typeof macros === 'object') {
+      return macros as Record<string, unknown>;
+    }
+
+    return {};
   }
 
   private toNumber(value: number | string | null | undefined): number | undefined {

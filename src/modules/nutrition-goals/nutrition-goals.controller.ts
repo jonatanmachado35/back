@@ -1,4 +1,4 @@
-import { Body, Controller, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { CreateNutritionGoalDto } from './dto/create-nutrition-goal.dto';
 import { UpdateNutritionGoalDto } from './dto/update-nutrition-goal.dto';
 import { NutritionGoalsService } from './nutrition-goals.service';
@@ -18,5 +18,13 @@ export class NutritionGoalsController {
     @Body() payload: UpdateNutritionGoalDto,
   ) {
     return this.nutritionGoalsService.updateByPacientId(pacientId, payload);
+  }
+
+  @Get('paciente/:pacientId/resumo-diario')
+  getDailySummary(
+    @Param('pacientId', ParseIntPipe) pacientId: number,
+    @Query('data') date?: string,
+  ) {
+    return this.nutritionGoalsService.getDailyBalance(pacientId, date);
   }
 }
