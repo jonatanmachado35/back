@@ -463,17 +463,21 @@ export class NutritionGoalsService {
     return {};
   }
 
-  private toNumber(value: number | string | null | undefined): number | undefined {
+  private toNumber(value: unknown): number | undefined {
     if (value === null || value === undefined) {
       return undefined;
     }
 
-    const parsed = typeof value === 'string' ? Number(value) : value;
-    if (Number.isNaN(parsed)) {
-      return undefined;
+    if (typeof value === 'number') {
+      return Number.isNaN(value) ? undefined : value;
     }
 
-    return parsed;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    }
+
+    return undefined;
   }
 
   private round(value: number, precision = 2): number {
