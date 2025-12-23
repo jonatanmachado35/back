@@ -4,6 +4,7 @@ import { SupabaseModule } from './common/database/supabase.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AnamnesisModule } from './modules/anamnesis/anamnesis.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { FoodsModule } from './modules/foods/foods.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { PaymentsModule } from './modules/payments/payments.module';
@@ -25,6 +26,7 @@ import configuration from './common/utils/configuration';
     PlansModule,
     PaymentsModule,
     NutritionGoalsModule,
+    FoodsModule,
     NotificationsModule,
     AnamnesisModule,
     AnalyticsModule,
