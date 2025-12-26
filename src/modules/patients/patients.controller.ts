@@ -84,6 +84,12 @@ export class PatientsController {
     return this.patientsService.findByUserId(userId);
   }
 
+  @Get('nutritionist/:nutritionistId')
+  @ApiOkResponse({ schema: { example: [patientRecordExample] } })
+  findByNutritionist(@Param('nutritionistId') nutritionistId: string) {
+    return this.patientsService.findByNutritionistId(nutritionistId);
+  }
+
   @Patch(':id')
   @ApiOkResponse({ schema: { example: patientRecordExample } })
   update(@Param('id') id: string, @Body() payload: UpdatePatientRecordDto) {

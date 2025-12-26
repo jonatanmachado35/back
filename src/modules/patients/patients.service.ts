@@ -43,6 +43,11 @@ export class PatientsService {
     return record;
   }
 
+  async findByNutritionistId(nutritionistId: string) {
+    const records = await this.repository.findAll();
+    return records.filter((item) => item.assignedNutritionistId === nutritionistId);
+  }
+
   async update(id: string, payload: UpdatePatientRecordDto) {
     return this.repository.update(id, payload);
   }
