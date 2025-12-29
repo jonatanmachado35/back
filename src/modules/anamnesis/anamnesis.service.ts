@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_CLIENT } from '../../common/database/supabase.module';
+import { CreateNutritionGoalDto } from '../nutrition-goals/dto/create-nutrition-goal.dto';
+import { NutritionGoalsService } from '../nutrition-goals/nutrition-goals.service';
 import { CreateAnamnesisDto } from './dto/create-anamnesis.dto';
 import { Anamnesis, AnamnesisAnswer } from './entities/anamnesis.entity';
 
@@ -26,7 +28,10 @@ type AnamnesisRow = {
 export class AnamnesisService {
   private readonly tableName = 'anamnese';
 
-  constructor(@Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient) {}
+  constructor(
+    @Inject(SUPABASE_CLIENT) private readonly supabase: SupabaseClient,
+    private readonly nutritionGoalsService: NutritionGoalsService,
+  ) {}
 
   async create(payload: CreateAnamnesisDto) {
     const usuarioId = payload.telefone ?? payload.dadosPessoais?.telefone ?? payload.userId;
@@ -43,6 +48,8 @@ export class AnamnesisService {
     if (!answers.length) {
       throw new BadRequestException('answers are required');
     }
+
+    const nutritionGoalPayload = this.buildNutritionGoalPayload(payload, usuarioId);
 
     const { data, error } = await this.supabase
       .from(this.tableName)
@@ -63,7 +70,16 @@ export class AnamnesisService {
       );
     }
 
-    return this.mapToAnamnesis(data as AnamnesisRow);
+    const record = data as AnamnesisRow;
+
+    try {
+      await this.nutritionGoalsService.create(nutritionGoalPayload);
+    } catch (goalError) {
+      await this.safeRollbackAnamnesis(record.id);
+      throw goalError;
+    }
+
+    return this.mapToAnamnesis(record);
   }
 
   async findByUserId(userId: string) {
@@ -148,5 +164,187 @@ export class AnamnesisService {
     }
 
     return String(value);
+  }
+
+  private buildNutritionGoalPayload(
+    payload: CreateAnamnesisDto,
+    pacienteRef: string,
+  ): CreateNutritionGoalDto {
+    const pacientId = this.extractPacientId(pacienteRef);
+    const pesoObjetivo = this.extractPesoObjetivo(payload);
+    if (pesoObjetivo === undefined) {
+      throw new BadRequestException('pesoObjetivo is required to calculate nutrition goals');
+    }
+
+    const dataObjetivo = this.extractDataObjetivo(payload);
+
+    return {
+      pacientId,
+      pesoObjetivo,
+      dataObjetivo,
+    };
+  }
+
+  private extractPacientId(value: string): number {
+    const parsed = this.parseStrictNumber(value);
+    if (parsed === undefined) {
+      throw new BadRequestException('pacient_id must be numeric');
+    }
+
+    if (!Number.isInteger(parsed)) {
+      throw new BadRequestException('pacient_id must be an integer');
+    }
+
+    return parsed;
+  }
+
+  private extractPesoObjetivo(payload: CreateAnamnesisDto): number | undefined {
+    const weightKeys = [
+      'pesoObjetivo',
+      'peso_objetivo',
+      'pesoMeta',
+      'peso_meta',
+      'metaPeso',
+      'meta_peso',
+      'pesoDesejado',
+      'peso_desejado',
+      'pesoAlvo',
+      'peso_alvo',
+      'peso',
+      'pesoKg',
+      'peso_kg',
+      'pesoAtual',
+      'peso_atual',
+    ];
+
+    const sections: Array<Record<string, unknown> | undefined> = [
+      payload.objetivos,
+      payload.dadosPessoais,
+      payload.historicoSaude,
+      payload.habitosAlimentares,
+      payload.estiloVida,
+    ];
+
+    for (const section of sections) {
+      const value = this.pickNumberFromSection(section, weightKeys);
+      if (value !== undefined) {
+        return value;
+      }
+    }
+
+    return this.pickNumberFromAnswers(payload.answers, weightKeys);
+  }
+
+  private extractDataObjetivo(payload: CreateAnamnesisDto): string | undefined {
+    const raw = payload.objetivos?.dataObjetivo ?? payload.objetivos?.data_objetivo;
+    if (typeof raw !== 'string') {
+      return undefined;
+    }
+
+    const trimmed = raw.trim();
+    if (!/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+      return undefined;
+    }
+
+    return trimmed.slice(0, 10);
+  }
+
+  private pickNumberFromSection(
+    section: Record<string, unknown> | undefined,
+    keys: string[],
+  ): number | undefined {
+    if (!section) {
+      return undefined;
+    }
+
+    for (const key of keys) {
+      if (!Object.prototype.hasOwnProperty.call(section, key)) {
+        continue;
+      }
+
+      const parsed = this.parseNumber(section[key]);
+      if (parsed !== undefined) {
+        return parsed;
+      }
+    }
+
+    return undefined;
+  }
+
+  private pickNumberFromAnswers(
+    answers: AnamnesisAnswer[] | undefined,
+    keys: string[],
+  ): number | undefined {
+    if (!answers?.length) {
+      return undefined;
+    }
+
+    const normalizedKeys = keys.map((key) => key.toLowerCase());
+
+    for (const answer of answers) {
+      const question = answer.question?.toLowerCase() ?? '';
+      if (!normalizedKeys.some((key) => question.includes(key))) {
+        continue;
+      }
+
+      const parsed = this.parseNumber(answer.answer);
+      if (parsed !== undefined) {
+        return parsed;
+      }
+    }
+
+    return undefined;
+  }
+
+  private parseNumber(value: unknown): number | undefined {
+    if (typeof value === 'number') {
+      return Number.isNaN(value) || value <= 0 ? undefined : value;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.replace(',', '.');
+      const match = normalized.match(/-?\d+(\.\d+)?/);
+      if (!match) {
+        return undefined;
+      }
+
+      const parsed = Number(match[0]);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        return undefined;
+      }
+
+      return parsed;
+    }
+
+    return undefined;
+  }
+
+  private parseStrictNumber(value: unknown): number | undefined {
+    if (typeof value === 'number') {
+      return Number.isNaN(value) || value <= 0 ? undefined : value;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!/^\d+(\.\d+)?$/.test(trimmed)) {
+        return undefined;
+      }
+
+      const parsed = Number(trimmed);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        return undefined;
+      }
+
+      return parsed;
+    }
+
+    return undefined;
+  }
+
+  private async safeRollbackAnamnesis(id: string): Promise<void> {
+    await this.supabase
+      .from(this.tableName)
+      .delete()
+      .eq('id', id);
   }
 }

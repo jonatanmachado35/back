@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Drop existing tables (in reverse order of dependencies)
 DROP TABLE IF EXISTS anamnese CASCADE;
+DROP TABLE IF EXISTS metas_nutricionais CASCADE;
 DROP TABLE IF EXISTS pagamentos CASCADE;
 DROP TABLE IF EXISTS registros_pacientes CASCADE;
 DROP TABLE IF EXISTS planos CASCADE;
@@ -121,6 +122,49 @@ COMMENT ON COLUMN registros_pacientes.metricas_saude IS 'Array de métricas de s
 COMMENT ON COLUMN registros_pacientes.registros_refeicoes IS 'Array de registros de refeições com dataHora, itens, calorias, macros';
 
 -- ============================================================================
+-- TABELA METAS_NUTRICIONAIS
+-- ============================================================================
+CREATE TABLE metas_nutricionais (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pacient_id INTEGER NOT NULL,
+    meta_calorias DECIMAL(10, 2),
+    meta_proteinas DECIMAL(10, 2),
+    meta_carboidratos DECIMAL(10, 2),
+    meta_gorduras DECIMAL(10, 2),
+    meta_fibras DECIMAL(10, 2),
+    meta_agua DECIMAL(10, 3),
+    peso_objetivo DECIMAL(10, 2),
+    data_objetivo DATE,
+    data_inicio DATE,
+    data_fim DATE,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_por INTEGER,
+    criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Create indexes for metas_nutricionais table
+CREATE INDEX idx_metas_nutricionais_pacient_id ON metas_nutricionais(pacient_id);
+CREATE INDEX idx_metas_nutricionais_ativo ON metas_nutricionais(ativo);
+
+-- Create trigger for atualizado_em
+CREATE TRIGGER atualizar_metas_nutricionais_data
+    BEFORE UPDATE ON metas_nutricionais
+    FOR EACH ROW
+    EXECUTE FUNCTION atualizar_data_atualizacao();
+
+-- Add comments
+COMMENT ON TABLE metas_nutricionais IS 'Metas nutricionais e macros calculadas por paciente';
+COMMENT ON COLUMN metas_nutricionais.pacient_id IS 'Identificador numerico do paciente';
+COMMENT ON COLUMN metas_nutricionais.meta_calorias IS 'Meta diaria de calorias';
+COMMENT ON COLUMN metas_nutricionais.meta_proteinas IS 'Meta diaria de proteinas';
+COMMENT ON COLUMN metas_nutricionais.meta_carboidratos IS 'Meta diaria de carboidratos';
+COMMENT ON COLUMN metas_nutricionais.meta_gorduras IS 'Meta diaria de gorduras';
+COMMENT ON COLUMN metas_nutricionais.meta_fibras IS 'Meta diaria de fibras';
+COMMENT ON COLUMN metas_nutricionais.meta_agua IS 'Meta diaria de agua em litros';
+COMMENT ON COLUMN metas_nutricionais.peso_objetivo IS 'Peso objetivo usado para calculo das metas';
+
+-- ============================================================================
 -- TABELA PAGAMENTOS
 -- ============================================================================
 CREATE TABLE pagamentos (
@@ -199,6 +243,7 @@ ALTER TABLE planos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE registros_pacientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pagamentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE anamnese ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metas_nutricionais ENABLE ROW LEVEL SECURITY;
 
 -- Planos: Leitura pública para usuários autenticados
 CREATE POLICY "Planos são visíveis para usuários autenticados"
@@ -278,6 +323,22 @@ CREATE POLICY "Anamnese gerenciável pelo dono"
     USING (usuario_id = auth.uid())
     WITH CHECK (usuario_id = auth.uid());
 
+-- Metas nutricionais: Visível para dono ou admin
+CREATE POLICY "Metas nutricionais visíveis para dono ou admin"
+    ON metas_nutricionais FOR SELECT
+    TO authenticated
+    USING (
+        pacient_id::text = auth.uid()::text
+        OR 'admin' = ANY((SELECT perfis FROM usuarios WHERE id = auth.uid()))
+    );
+
+-- Metas nutricionais: Gerenciável pelo dono
+CREATE POLICY "Metas nutricionais gerenciáveis pelo dono"
+    ON metas_nutricionais FOR ALL
+    TO authenticated
+    USING (pacient_id::text = auth.uid()::text)
+    WITH CHECK (pacient_id::text = auth.uid()::text);
+
 -- ============================================================================
 -- SEED DATA
 -- ============================================================================
@@ -295,7 +356,7 @@ INSERT INTO planos (nome, descricao, publico_alvo, preco, ciclo_cobranca, benefi
 DO $$
 BEGIN
     RAISE NOTICE 'Schema do banco de dados ZapNutre criado com sucesso!';
-    RAISE NOTICE 'Tabelas criadas: usuarios, planos, registros_pacientes, pagamentos, anamnese';
+    RAISE NOTICE 'Tabelas criadas: usuarios, planos, registros_pacientes, metas_nutricionais, pagamentos, anamnese';
     RAISE NOTICE 'Planos padrão foram cadastrados.';
     RAISE NOTICE 'O usuário admin será criado automaticamente quando a API iniciar.';
 END $$;

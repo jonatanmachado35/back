@@ -125,7 +125,7 @@ export class NutritionGoalsService {
     const { data: mealsRow, error: mealsError } = await this.supabase
       .from(this.patientRecordsTable)
       .select('registros_refeicoes')
-      .eq('pacient_id', pacientId)
+      .eq('usuario_id', pacientId)
       .maybeSingle();
 
     if (mealsError) {
@@ -275,9 +275,14 @@ export class NutritionGoalsService {
   }
 
   private mapToNutritionGoal(record: NutritionGoalRow): NutritionGoal {
+    const pacientId = this.toNumber(record.pacient_id);
+    if (pacientId === undefined) {
+      throw new InternalServerErrorException('Invalid pacient_id value');
+    }
+
     return {
       id: record.id,
-      pacientId: record.pacient_id,
+      pacientId,
       metaCalorias: this.toNumber(record.meta_calorias),
       metaProteinas: this.toNumber(record.meta_proteinas),
       metaCarboidratos: this.toNumber(record.meta_carboidratos),

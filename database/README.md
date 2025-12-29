@@ -42,8 +42,9 @@ psql "postgresql://postgres:[YOUR-PASSWORD]@db.wfssimpiekvaihgbrvse.supabase.co:
 1. **usuarios** - Usuários do sistema (pacientes, nutricionistas, admins)
 2. **planos** - Planos de assinatura
 3. **registros_pacientes** - Registros de saúde e dieta dos pacientes
-4. **pagamentos** - Transações de pagamento
-5. **anamnese** - Questionários de avaliação nutricional
+4. **metas_nutricionais** - Metas nutricionais e macros calculadas
+5. **pagamentos** - Transações de pagamento
+6. **anamnese** - Questionários de avaliação nutricional
 
 ### Recursos
 
